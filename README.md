@@ -4,6 +4,17 @@
 
 Skyscraper is an assembler featuring its own ISA (Instruction Set Architecture), however, it compiles to x86-64, aarch64 and  more!
 
+## Design Goals
+
+- Architecture-independent instruction set.
+- Portable across multiple native CPU architectures.
+- Predictable instruction semantics.
+- Efficient native code generation.
+- Register-oriented execution model.
+- Stable binary format.
+- Extensible through future ISA revisions.
+- Future ISA-spec additions through proper versioning and backward compatibility.
+
 ## Why it was made?
 
 ~~Why not?~~  
