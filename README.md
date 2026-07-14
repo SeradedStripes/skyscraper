@@ -1,0 +1,23 @@
+# Skyscraper
+
+## What is Skyscraper?
+
+Skyscraper is an assembler featuring its own ISA (Instruction Set Architecture), however, it compiles to x86-64, aarch64 and  more!
+
+## Why it was made?
+
+~~Why not?~~  
+Skyscraper was made as who wants to learn multiple ISAs when you can just learn one and compile to multiple?
+
+## Stack
+
+- Skyscraper will have a bootstrap compiler written in Rust, which will compile to x86-64 and aarch64.
+- Once the bootstrap compiler is complete, Skyscraper will be able to compile itself to x86-64 and aarch64.
+
+## Restrictions
+
+- Skyscraper needs to be super modular, ie:
+  - You go to lets say isa/ and then you can add more instruction sets to the compiler to compile to more ISAs. Without having to change the compiler itself.
+  - The compiler should be able to compile itself to any ISA that is supported by the compiler.
+- We need to be able to compile to linux first, then windows and macos.
+  - This should be modular too, ie. isa/x86-64/linux, isa/x86-64/windows, isa/x86-64/macos, etc.
