@@ -32,3 +32,9 @@ Skyscraper was made as who wants to learn multiple ISAs when you can just learn 
   - The compiler should be able to compile itself to any ISA that is supported by the compiler.
 - We need to be able to compile to linux first, then windows and macos.
   - This should be modular too, ie. isa/x86-64/linux, isa/x86-64/windows, isa/x86-64/macos, etc.
+
+## License
+
+Skyscraper is licensed under Apache License 2.0. See LICENSE for more information.  
+The ISAs that Skyscraper compiles to are licensed under their own licenses, check the license file in each ISA folder for more information.  
+Skyscraper's language specification is licensed under Creative Commons Attribution 4.0 International License (CC BY 4.0)  
