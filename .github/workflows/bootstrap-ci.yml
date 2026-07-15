@@ -1,0 +1,40 @@
+name: Bootstrap CI
+
+on:
+  push:
+    paths:
+      - 'bootstrap/**'
+      - '.github/workflows/bootstrap-ci.yml'
+  pull_request:
+    paths:
+      - 'bootstrap/**'
+      - '.github/workflows/bootstrap-ci.yml'
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Run checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Rust artificats
+        uses: Swatinem/rust-cache@v2
+        with:
+          share-key: ${{ runner.os }}-rust-cache
+
+      - name: Check foramtting
+        run: cargo fmt --all -- --check
+      
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+    
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Report Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: bootstrap-ci-results  
