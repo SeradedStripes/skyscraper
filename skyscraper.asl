@@ -529,30 +529,98 @@ instruction decode_SYSCALL(bits(32) enc) is
     let imm9 = enc[13:5];
     let syscall_num = R[ret0];
 
+    // Skyscraper ABI syscall numbers
+    // Platform-specific backends map these to OS syscalls
     case syscall_num of
-        0 => { // exit
-            Exit(R[arg0]);
+        0 => { // exit - terminate process
+            Syscall_exit(R[arg0]);
         }
-        1 => { // read
+        1 => { // read - read from fd
             R[ret0] = Syscall_read(R[arg0], R[arg1], R[arg2]);
         }
-        2 => { // write
+        2 => { // write - write to fd
             R[ret0] = Syscall_write(R[arg0], R[arg1], R[arg2]);
         }
-        3 => { // open
+        3 => { // open - open file
             R[ret0] = Syscall_open(R[arg0], R[arg1], R[arg2]);
         }
-        4 => { // close
+        4 => { // close - close fd
             R[ret0] = Syscall_close(R[arg0]);
         }
-        5 => { // brk
-            R[ret0] = Syscall_brk(R[arg0]);
+        5 => { // seek - seek in file
+            R[ret0] = Syscall_seek(R[arg0], R[arg1], R[arg2]);
         }
-        6 => { // mmap
+        6 => { // stat - get file status
+            R[ret0] = Syscall_stat(R[arg0], R[arg1]);
+        }
+        7 => { // mmap - map memory
             R[ret0] = Syscall_mmap(R[arg0], R[arg1], R[arg2], R[arg3], R[arg4], R[arg5]);
         }
-        7 => { // munmap
+        8 => { // munmap - unmap memory
             R[ret0] = Syscall_munmap(R[arg0], R[arg1]);
+        }
+        9 => { // brk - set/clear heap break
+            R[ret0] = Syscall_brk(R[arg0]);
+        }
+        10 => { // clock - monotonic clock (ns)
+            R[ret0] = Syscall_clock();
+        }
+        11 => { // yield - yield to scheduler
+            Syscall_yield();
+        }
+        12 => { // getpid - get process ID
+            R[ret0] = Syscall_getpid();
+        }
+        13 => { // fork - fork process
+            R[ret0] = Syscall_fork();
+        }
+        14 => { // exec - execute program
+            R[ret0] = Syscall_exec(R[arg0], R[arg1], R[arg2]);
+        }
+        15 => { // pipe - create pipe
+            R[ret0] = Syscall_pipe(R[arg0]);
+        }
+        16 => { // dup - duplicate fd
+            R[ret0] = Syscall_dup(R[arg0]);
+        }
+        17 => { // dup2 - duplicate to specific fd
+            R[ret0] = Syscall_dup2(R[arg0], R[arg1]);
+        }
+        18 => { // ioctl - device I/O control
+            R[ret0] = Syscall_ioctl(R[arg0], R[arg1], R[arg2]);
+        }
+        19 => { // time - wall clock time
+            R[ret0] = Syscall_time(R[arg0]);
+        }
+        20 => { // sleep - sleep for duration
+            Syscall_sleep(R[arg0]);
+        }
+        21 => { // mprotect - change memory protection
+            R[ret0] = Syscall_mprotect(R[arg0], R[arg1], R[arg2]);
+        }
+        22 => { // getdents - read directory entries
+            R[ret0] = Syscall_getdents(R[arg0], R[arg1], R[arg2]);
+        }
+        23 => { // unlink - delete file
+            R[ret0] = Syscall_unlink(R[arg0]);
+        }
+        24 => { // rename - rename file
+            R[ret0] = Syscall_rename(R[arg0], R[arg1]);
+        }
+        25 => { // mkdir - create directory
+            R[ret0] = Syscall_mkdir(R[arg0], R[arg1]);
+        }
+        26 => { // rmdir - remove directory
+            R[ret0] = Syscall_rmdir(R[arg0]);
+        }
+        27 => { // chdir - change working directory
+            R[ret0] = Syscall_chdir(R[arg0]);
+        }
+        28 => { // getcwd - get current working directory
+            R[ret0] = Syscall_getcwd(R[arg0], R[arg1]);
+        }
+        _ => { // reserved - undefined
+            UNDEFINED;
         }
 
 // =============================================================================
@@ -784,14 +852,81 @@ memfunc Mem64[bits(64) addr] => bits(64);
 memfunc Mem128[bits(64) addr] => bits(128);
 
 // =============================================================================
-// System Interface
+// System Interface - Skyscraper ABI
 // =============================================================================
+//
+// These are architecture-independent syscalls defined by Skyscraper.
+// Platform-specific backends (isa/x86-64/linux, isa/aarch64/linux, etc.)
+// map these to the appropriate OS syscall interface.
+//
+// Syscall numbers:
+//   0  = exit
+//   1  = read
+//   2  = write
+//   3  = open
+//   4  = close
+//   5  = seek
+//   6  = stat
+//   7  = mmap
+//   8  = munmap
+//   9  = brk
+//   10 = clock
+//   11 = yield
+//   12 = getpid
+//   13 = fork
+//   14 = exec
+//   15 = pipe
+//   16 = dup
+//   17 = dup2
+//   18 = ioctl
+//   19 = time
+//   20 = sleep
+//   21 = mprotect
+//   22 = getdents
+//   23 = unlink
+//   24 = rename
+//   25 = mkdir
+//   26 = rmdir
+//   27 = chdir
+//   28 = getcwd
 
-syscall Exit(bits(64) code) => void;
+// Process control
+syscall Syscall_exit(bits(64) code) => void;
+syscall Syscall_fork() => bits(64);
+syscall Syscall_exec(bits(64) path, bits(64) argv, bits(64) envp) => bits(64);
+syscall Syscall_getpid() => bits(64);
+syscall Syscall_yield() => void;
+
+// File I/O
 syscall Syscall_read(bits(64) fd, bits(64) buf, bits(64) count) => bits(64);
 syscall Syscall_write(bits(64) fd, bits(64) buf, bits(64) count) => bits(64);
 syscall Syscall_open(bits(64) path, bits(64) flags, bits(64) mode) => bits(64);
 syscall Syscall_close(bits(64) fd) => bits(64);
-syscall Syscall_brk(bits(64) addr) => bits(64);
+syscall Syscall_seek(bits(64) fd, bits(64) offset, bits(64) whence) => bits(64);
+syscall Syscall_stat(bits(64) path, bits(64) buf) => bits(64);
+syscall Syscall_dup(bits(64) fd) => bits(64);
+syscall Syscall_dup2(bits(64) oldfd, bits(64) newfd) => bits(64);
+syscall Syscall_ioctl(bits(64) fd, bits(64) request, bits(64) arg) => bits(64);
+
+// Directory operations
+syscall Syscall_getdents(bits(64) fd, bits(64) buf, bits(64) count) => bits(64);
+syscall Syscall_unlink(bits(64) path) => bits(64);
+syscall Syscall_rename(bits(64) oldpath, bits(64) newpath) => bits(64);
+syscall Syscall_mkdir(bits(64) path, bits(64) mode) => bits(64);
+syscall Syscall_rmdir(bits(64) path) => bits(64);
+syscall Syscall_chdir(bits(64) path) => bits(64);
+syscall Syscall_getcwd(bits(64) buf, bits(64) size) => bits(64);
+
+// Memory management
 syscall Syscall_mmap(bits(64) addr, bits(64) len, bits(64) prot, bits(64) flags, bits(64) fd, bits(64) offset) => bits(64);
 syscall Syscall_munmap(bits(64) addr, bits(64) len) => bits(64);
+syscall Syscall_brk(bits(64) addr) => bits(64);
+syscall Syscall_mprotect(bits(64) addr, bits(64) len, bits(64) prot) => bits(64);
+
+// Time
+syscall Syscall_clock() => bits(64);
+syscall Syscall_time(bits(64) buf) => bits(64);
+syscall Syscall_sleep(bits(64) nanoseconds) => void;
+
+// IPC
+syscall Syscall_pipe(bits(64) fds) => bits(64);

@@ -486,7 +486,7 @@ Mask operations manipulate mask registers for conditional/predicated execution.
 
 | Instruction      | Func | Operation                                    |
 |------------------|------|----------------------------------------------|
-| `syscall imm9`    | `0000` | Trap to kernel with syscall number `imm9`   |
+| `syscall imm9`    | `0000` | Trap to runtime with syscall number `imm9`  |
 | `halt`            | `0001` | Halt execution                               |
 | `nop`             | `0010` | No operation                                 |
 
@@ -498,18 +498,60 @@ Mask operations manipulate mask registers for conditional/predicated execution.
 | `arg0`-`arg7` | Arguments            |
 | `ret0`-`ret1` | Return values        |
 
-**Linux x86-64 Syscall Numbers:**
+**Skyscraper ABI Syscall Numbers:**
 
-| Number | Name      | Arguments                                    |
-|--------|-----------|----------------------------------------------|
-| 0      | `exit`    | `arg0` = exit code                           |
-| 1      | `read`    | `arg0` = fd, `arg1` = buf, `arg2` = count   |
-| 2      | `write`   | `arg0` = fd, `arg1` = buf, `arg2` = count   |
-| 3      | `open`    | `arg0` = path, `arg1` = flags, `arg2` = mode|
-| 4      | `close`   | `arg0` = fd                                  |
-| 5      | `brk`     | `arg0` = addr (0 = query)                    |
-| 6      | `mmap`    | `arg0` = addr, `arg1` = len, `arg2` = prot, `arg3` = flags, `arg4` = fd, `arg5` = offset |
-| 7      | `munmap`  | `arg0` = addr, `arg1` = len                  |
+These are architecture-independent syscall numbers defined by Skyscraper. The backend maps them to OS-specific syscalls (Linux, Windows, macOS) at the platform layer.
+
+| Number | Name       | Arguments                                     | Description                     |
+|--------|------------|-----------------------------------------------|---------------------------------|
+| 0      | `exit`     | `arg0` = code                                 | Terminate process               |
+| 1      | `read`     | `arg0` = fd, `arg1` = buf, `arg2` = count    | Read from file descriptor       |
+| 2      | `write`    | `arg0` = fd, `arg1` = buf, `arg2` = count    | Write to file descriptor        |
+| 3      | `open`     | `arg0` = path, `arg1` = flags, `arg2` = mode | Open file                       |
+| 4      | `close`    | `arg0` = fd                                   | Close file descriptor           |
+| 5      | `seek`     | `arg0` = fd, `arg1` = offset, `arg2` = whence| Seek in file                    |
+| 6      | `stat`     | `arg0` = path, `arg1` = buf                   | Get file status                 |
+| 7      | `mmap`     | `arg0` = addr, `arg1` = len, `arg2` = prot, `arg3` = flags, `arg4` = fd, `arg5` = offset | Map memory |
+| 8      | `munmap`   | `arg0` = addr, `arg1` = len                   | Unmap memory                    |
+| 9      | `brk`      | `arg0` = addr (0 = query)                     | Set/clear heap break            |
+| 10     | `clock`    | (none)                                        | Get monotonic clock (ns)        |
+| 11     | `yield`    | (none)                                        | Yield to scheduler              |
+| 12     | `getpid`   | (none)                                        | Get process ID                  |
+| 13     | `fork`     | (none)                                        | Fork process (0 in child, pid in parent) |
+| 14     | `exec`     | `arg0` = path, `arg1` = argv, `arg2` = envp  | Execute program                 |
+| 15     | `pipe`     | `arg0` = fds (2-element array)                | Create pipe                     |
+| 16     | `dup`      | `arg0` = fd                                   | Duplicate file descriptor       |
+| 17     | `dup2`     | `arg0` = oldfd, `arg1` = newfd                | Duplicate to specific fd        |
+| 18     | `ioctl`    | `arg0` = fd, `arg1` = request, `arg2` = arg   | Device I/O control              |
+| 19     | `time`     | `arg0` = buf (8 bytes, seconds since epoch)   | Get wall clock time             |
+| 20     | `sleep`    | `arg0` = nanoseconds                          | Sleep for duration              |
+| 21     | `mprotect` | `arg0` = addr, `arg1` = len, `arg2` = prot   | Change memory protection        |
+| 22     | `getdents` | `arg0` = fd, `arg1` = buf, `arg2` = count    | Read directory entries          |
+| 23     | `unlink`   | `arg0` = path                                 | Delete file                     |
+| 24     | `rename`   | `arg0` = oldpath, `arg1` = newpath            | Rename file                     |
+| 25     | `mkdir`    | `arg0` = path, `arg1` = mode                  | Create directory                |
+| 26     | `rmdir`    | `arg0` = path                                 | Remove directory                |
+| 27     | `chdir`    | `arg0` = path                                 | Change working directory        |
+| 28     | `getcwd`   | `arg0` = buf, `arg1` = size                   | Get current working directory   |
+| 29-31  | (reserved) |                                               | Future use                      |
+
+**Seek Whence Values (for `seek` syscall):**
+
+| Value | Name     | Description                   |
+|-------|----------|-------------------------------|
+| 0     | `SEEK_SET` | Seek from beginning of file |
+| 1     | `SEEK_CUR` | Seek from current position  |
+| 2     | `SEEK_END` | Seek from end of file       |
+
+**Memory Protection Flags (for `mmap`/`mprotect`):**
+
+| Bit | Name   | Description       |
+|-----|--------|-------------------|
+| 0   | `PROT_READ`  | Page can be read    |
+| 1   | `PROT_WRITE` | Page can be written |
+| 2   | `PROT_EXEC`  | Page can be executed|
+
+**Note:** The backend platform layer (e.g., `isa/x86-64/linux`, `isa/aarch64/linux`) translates these abstract syscall numbers into the appropriate OS-specific syscall interface. This keeps the ISA portable across platforms.
 
 ---
 
