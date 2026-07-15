@@ -3,7 +3,7 @@
 ## Phase 1: Bootstrap Foundation
 
 - [x] Project scaffolding (Rust cargo project)
-- [ ] ISA subset definition (instructions needed for self-hosting)
+- [x] ISA subset definition (instructions needed for self-hosting) — ISA-spec.md v1.1 complete (32 integer regs, 16 vector regs, 16 mask regs, 5-bit register encoding)
 - [ ] Lexer / tokenizer for Skyscraper assembly
 - [ ] Parser producing AST
 - [ ] x86-64 code generation (minimal instruction subset)
