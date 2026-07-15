@@ -897,3 +897,447 @@ _start:
 | `UNUSED`| `1101` | -      | Reserved                 |
 | `UNUSED`| `1110` | -      | Reserved                 |
 | `UNUSED`| `1111` | -      | Reserved                 |
+
+---
+
+## 15. File Extensions and Naming
+
+| Extension | Purpose                        | Example               |
+|-----------|--------------------------------|-----------------------|
+| `.sky`    | Skyscraper source files        | `main.sky`, `lib.sky` |
+| `.conf`   | Project configuration (TOML)   | `skyscraper.conf`     |
+| `.skyo`   | Skyscraper object files        | `main.skyo`           |
+| `.skyb`   | Skyscraper binary (linked)     | `main.skyb`           |
+
+**Language name:** Skyscraper (Skyscraper Assembly)
+**File extension:** `.sky`
+
+---
+
+## 16. Lexer Design
+
+The lexer processes `.sky` source files and produces a stream of tokens.
+
+### 16.1 Token Types
+
+| Token           | Pattern                                  | Example            |
+|-----------------|------------------------------------------|--------------------|
+| `INSTRUCTION`   | `[a-z][a-z0-9]*` (match ISA mnemonics)  | `add`, `ldi`, `jal`|
+| `REGISTER`      | `r[0-9]+`, `arg[0-7]`, `ret[01]`, `temp[0-5]`, `vec[0-9]+`, `mask[0-9]+`, `sp`, `fp`, `lr` | `r0`, `arg3`, `vec12` |
+| `DIRECTIVE`     | `\.[a-zA-Z]+`                            | `.text`, `.string`  |
+| `LABEL_DEF`     | `[a-zA-Z_][a-zA-Z0-9_]*:`               | `loop:`, `_start:`  |
+| `LABEL_REF`     | `[a-zA-Z_][a-zA-Z0-9_]*` (not instruction/directive/register) | `loop`, `_start` |
+| `NUMBER`        | See 16.2                                 | `42`, `0xFF`        |
+| `CHAR`          | `'.'` or `'\\.'`                         | `'A'`, `'\n'`      |
+| `STRING`        | `"..."` (with escape sequences)          | `"Hello\n"`         |
+| `LPAREN`        | `\(`                                     | `(`                 |
+| `RPAREN`        | `\)`                                     | `)`                 |
+| `LBRACKET`      | `\[`                                     | `[`                 |
+| `RBRACKET`      | `\]`                                     | `]`                 |
+| `COMMA`         | `,`                                      | `,`                 |
+| `PLUS`          | `\+`                                     | `+`                 |
+| `MINUS`         | `-`                                      | `-`                 |
+| `STAR`          | `\*`                                     | `*`                 |
+| `SLASH`         | `/`                                      | `/`                 |
+| `PERCENT`       | `%`                                      | `%`                 |
+| `AMPERSAND`     | `&`                                      | `&`                 |
+| `PIPE`          | `\|`                                     | `\|`                |
+| `CARET`         | `\^`                                     | `^`                 |
+| `TILDE`         | `~`                                      | `~`                |
+| `BANG`          | `!`                                      | `!`                 |
+| `COLON`         | `:` (standalone)                         | `:`                 |
+| `ASSIGN`        | `=`                                      | `=`                 |
+| `DOLLAR`        | `$`                                      | `$`                 |
+| `COMMENT`       | `;[^\n]*`                                | `; this is a comment` |
+| `NEWLINE`       | `\n`                                     |                    |
+| `EOF`           | end of file                              |                    |
+| `UNKNOWN`       | any unmatched character                  |                    |
+
+### 16.2 Number Literals
+
+| Format     | Regex              | Description                    | Range                   |
+|------------|--------------------|--------------------------------|-------------------------|
+| Decimal    | `[0-9]+`           | Unsigned decimal               | 0 .. 2^64-1            |
+| Hex        | `0x[0-9a-fA-F]+`  | Hexadecimal                    | 0 .. 2^64-1            |
+| Binary     | `0b[01]+`          | Binary                         | 0 .. 2^64-1            |
+| Octal      | `0o[0-7]+`         | Octal                          | 0 .. 2^64-1            |
+| Negative   | `-[0-9]+`          | Negative decimal               | -2^63 .. -1            |
+| Char       | `'.'`              | ASCII character (zero-extended) | 0 .. 127               |
+| Escaped    | `'\\.'`            | Escape sequence                | See 16.3                |
+
+### 16.3 Escape Sequences
+
+| Sequence | Meaning           | Byte Value |
+|----------|-------------------|------------|
+| `\n`     | Newline           | 0x0A       |
+| `\t`     | Tab               | 0x09       |
+| `\r`     | Carriage return   | 0x0D       |
+| `\0`     | Null              | 0x00       |
+| `\\`     | Backslash         | 0x5C       |
+| `\'`     | Single quote      | 0x27       |
+| `\"`     | Double quote      | 0x22       |
+| `\xHH`   | Hex byte          | 0xHH       |
+
+### 16.4 Tokenization Rules
+
+1. Skip whitespace (spaces, tabs) — do NOT skip newlines
+2. Skip comments (`;` to end of line)
+3. Match longest valid token first
+4. Labels (`name:`) are tokenized as `LABEL_DEF`
+5. Identifiers that match instruction mnemonics are `INSTRUCTION`
+6. Identifiers that match register names are `REGISTER`
+7. Identifiers that start with `.` are `DIRECTIVE`
+8. All other identifiers are `LABEL_REF`
+
+### 16.5 Lexer Example
+
+Input:
+```asm
+_start:
+    ldi arg0, 42        ; load 42 into arg0
+    jal compute         ; call compute
+```
+
+Token stream:
+```
+LABEL_DEF("_start")
+NEWLINE
+INSTRUCTION("ldi")
+REGISTER("arg0")
+COMMA
+NUMBER(42)
+COMMENT("; load 42 into arg0")
+NEWLINE
+INSTRUCTION("jal")
+LABEL_REF("compute")
+COMMENT("; call compute")
+NEWLINE
+EOF
+```
+
+---
+
+## 17. Parser Design
+
+The parser consumes the token stream and produces an Abstract Syntax Tree (AST).
+
+### 17.1 Grammar (BNF)
+
+```bnf
+<program>       ::= <statement>*
+
+<statement>     ::= <label_def>
+                   | <instruction>
+                   | <directive>
+                   | <macro_def>
+                   | <constant_def>
+                   | <empty_line>
+
+<label_def>     ::= LABEL_DEF
+
+<instruction>   ::= INSTRUCTION <operand_list>
+
+<operand_list>  ::= <operand> (COMMA <operand>)*
+                   | <empty>
+
+<operand>       ::= <register>
+                   | <immediate>
+                   | <memory_ref>
+                   | <label_ref>
+                   | <vec_register>
+                   | <mask_register>
+
+<register>      ::= REGISTER
+
+<immediate>     ::= NUMBER
+                   | MINUS NUMBER
+                   | CHAR
+                   | <expr>
+
+<memory_ref>    ::= LBRACKET REGISTER PLUS <immediate> RBRACKET
+                   | LBRACKET REGISTER PLUS REGISTER RBRACKET
+                   | LBRACKET LABEL_REF RBRACKET
+
+<vec_register>  ::= REGISTER  ; (vec0-vec15)
+
+<mask_register> ::= REGISTER  ; (mask0-mask15)
+
+<label_ref>     ::= LABEL_REF
+
+<directive>     ::= DIRECTIVE <directive_args>
+
+<directive_args> ::= <expr_list>
+                    | <string_list>
+                    | <empty>
+
+<expr_list>     ::= <expr> (COMMA <expr>)*
+
+<expr>          ::= NUMBER
+                   | NUMBER PLUS NUMBER
+                   | NUMBER MINUS NUMBER
+                   | LABEL_REF
+                   | LABEL_REF MINUS LABEL_REF  ; subtraction
+                   | DOLLAR  ; current address
+
+<string_list>   ::= STRING (COMMA STRING)*
+
+<macro_def>     ::= DIRECTIVE("macro") LABEL_REF <macro_args>
+                     <statement>*
+                   DIRECTIVE("endm")
+
+<macro_args>    ::= REGISTER (COMMA REGISTER)*
+                   | <empty>
+
+<constant_def>  ::= LABEL_REF ASSIGN <expr>
+```
+
+### 17.2 AST Node Types
+
+```rust
+enum AstNode {
+    Program(Vec<Statement>),
+    Statement(Statement),
+}
+
+enum Statement {
+    LabelDef(String),
+    Instruction {
+        mnemonic: String,
+        operands: Vec<Operand>,
+    },
+    Directive {
+        name: String,
+        args: Vec<Expr>,
+    },
+    ConstantDef {
+        name: String,
+        value: Expr,
+    },
+    MacroDef {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Statement>,
+    },
+}
+
+enum Operand {
+    Register(String),
+    VecRegister(String),
+    MaskRegister(String),
+    Immediate(Expr),
+    MemoryRef {
+        base: String,
+        offset: Option<Expr>,
+    },
+    LabelRef(String),
+}
+
+enum Expr {
+    Number(i64),
+    LabelRef(String),
+    BinaryOp {
+        op: BinOp,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    CurrentAddr,  // $
+}
+
+enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+```
+
+### 17.3 Parser Phases
+
+The parser operates in two passes:
+
+**Pass 1: Parse and collect**
+- Tokenize source
+- Parse into AST
+- Collect all label definitions into symbol table
+- Record file positions of forward references
+
+**Pass 2: Resolve and emit**
+- Resolve forward references using symbol table
+- Encode instructions into 32-bit words
+- Emit object file sections (.text, .data, .bss)
+- Generate relocation entries for unresolved symbols
+
+### 17.4 Error Handling
+
+Errors include:
+- **Lexer errors:** Unrecognized character, unterminated string, invalid number
+- **Parse errors:** Unexpected token, missing operand, invalid syntax
+- **Assembly errors:** Unknown instruction, invalid register, immediate out of range, undefined label, duplicate label, alignment error
+
+All errors report:
+- File name
+- Line number
+- Column number
+- Error message
+- Source context (optional)
+
+---
+
+## 18. Project Structure
+
+```
+myproject/
+├── skyscraper.conf        # Project configuration
+├── src/
+│   ├── main.sky           # Entry point (contains _start)
+│   └── lib.sky            # Library code
+├── target/
+│   ├── debug/             # Debug build output
+│   │   ├── main.skyo      # Object files
+│   │   ├── lib.skyo
+│   │   └── main.skyb      # Linked binary
+│   └── release/           # Release build output
+│       ├── main.skyo
+│       ├── lib.skyo
+│       └── main.skyb
+└── pkg/                   # Dependencies (future)
+    └── ...
+```
+
+**Build output convention:**
+- Object files: `<name>.skyo`
+- Linked binaries: `<name>.skyb`
+- Debug builds: `target/debug/`
+- Release builds: `target/release/`
+
+---
+
+## 19. Configuration File
+
+`skyscraper.conf` uses TOML syntax.
+
+```toml
+# Project metadata
+[package]
+name = "myproject"
+version = "0.1.0"
+authors = ["Author Name <email@example.com>"]
+description = "A short description"
+license = "Apache-2.0"
+
+# Build configuration
+[build]
+target = "x86-64/linux"       # Target platform
+entry = "src/main.sky"        # Entry point file
+opt-level = 0                 # 0=debug, 1=optimized, 2=aggressive
+debug = true                  # Include debug info
+
+# Source directories
+[paths]
+src = "src"                   # Source directory
+output = "target"             # Build output directory
+
+# Dependencies (future)
+[dependencies]
+# pkg-name = "version"
+# pkg-name = { version = "1.0", features = ["std"] }
+```
+
+### 19.1 Target Triples
+
+| Triple              | Description                    |
+|---------------------|--------------------------------|
+| `x86-64/linux`      | Linux x86-64 (first target)    |
+| `aarch64/linux`     | Linux ARM64                    |
+| `x86-64/windows`    | Windows x86-64                 |
+| `aarch64/windows`   | Windows ARM64                  |
+| `x86-64/macos`      | macOS x86-64                   |
+| `aarch64/macos`     | macOS ARM64 (Apple Silicon)    |
+
+---
+
+## 20. Build System
+
+### 20.1 Build Commands
+
+| Command                    | Description                          |
+|----------------------------|--------------------------------------|
+| `skyscraper build`         | Build the project (debug)            |
+| `skyscraper build --release` | Build the project (optimized)      |
+| `skyscraper run`           | Build and run                        |
+| `skyscraper clean`         | Remove target/ directory             |
+| `skyscraper init`          | Create new project scaffold          |
+| `skyscraper check`         | Check syntax without emitting binary |
+| `skyscraper fmt`           | Format source files                  |
+| `skyscraper test`          | Run tests                            |
+
+### 20.2 Build Pipeline
+
+```
+.sky files
+    │
+    ▼
+┌─────────┐
+│  Lexer  │  Tokenize source
+└────┬────┘
+     │
+     ▼
+┌─────────┐
+│  Parser │  Build AST
+└────┬────┘
+     │
+     ▼
+┌──────────┐
+│ Assembler│  Encode instructions, emit .skyo
+└────┬─────┘
+     │
+     ▼
+┌─────────┐
+│  Linker │  Resolve symbols, produce .skyb
+└────┬────┘
+     │
+     ▼
+┌──────────────┐
+│ Platform Fixup│  Map syscalls, set entry point
+└────┬─────────┘
+     │
+     ▼
+  Native binary (ELF/Mach-O/PE)
+```
+
+---
+
+## 21. Package System (Future)
+
+Planned for Phase 5. Inspired by Cargo and npm.
+
+### 21.1 Package Registry
+
+```
+skyscraper package search <query>
+skyscraper package install <package>
+skyscraper package publish
+```
+
+### 21.2 Dependency Format in `skyscraper.conf`
+
+```toml
+[dependencies]
+math = "1.0"                           # From registry
+io = { version = "2.1", features = ["file", "net"] }
+utils = { git = "https://github.com/user/utils" }
+local = { path = "../local-pkg" }      # Local dependency
+```
+
+### 21.3 Package Layout
+
+```
+pkg-name/
+├── skyscraper.conf
+├── src/
+│   ├── lib.sky
+│   └── ...
+└── tests/
+    └── test.sky
+```

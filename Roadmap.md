@@ -3,7 +3,9 @@
 ## Phase 1: Bootstrap Foundation
 
 - [x] Project scaffolding (Rust cargo project)
-- [x] ISA subset definition (instructions needed for self-hosting) — ISA-spec.md v1.1 complete (32 integer regs, 16 vector regs, 16 mask regs, 5-bit register encoding)
+- [x] ISA subset definition (instructions needed for self-hosting) — ISA-spec.md v1.1 complete (32 integer regs, 16 vec regs, 16 mask regs, 5-bit register encoding)
+- [x] Lexer/parser design (sections 16-17 of ISA-spec.md) — token types, grammar, AST, two-pass assembly
+- [x] Project structure and config format (sections 18-21) — `.sky` files, `skyscraper.conf`, `target/` layout, build commands
 - [ ] Lexer / tokenizer for Skyscraper assembly
 - [ ] Parser producing AST
 - [ ] x86-64 code generation (minimal instruction subset)
