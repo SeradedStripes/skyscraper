@@ -16,6 +16,10 @@ jobs:
   checks:
     name: Run checks
     runs-on: ubuntu-latest
+    # bootstrap/ dir
+    defaults:
+      run:
+        working-directory: ./bootstrap
     steps:
       - uses: actions/checkout@v7
 
