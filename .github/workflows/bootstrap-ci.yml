@@ -12,6 +12,10 @@ on:
   workflow_call:
   workflow_dispatch:
 
+concurrency:
+  group: bootstrap-ci
+  cancel-in-progress: true
+
 jobs:
   checks:
     name: Run checks
@@ -26,7 +30,7 @@ jobs:
       - name: Cache Rust artificats
         uses: Swatinem/rust-cache@v2
         with:
-          share-key: ${{ runner.os }}-rust-cache
+          shared-key: ${{ runner.os }}-rust-cache
 
       - name: Check foramtting
         run: cargo fmt --all --check
