@@ -45,7 +45,7 @@ All values are stored in little-endian byte order. Operations default to 64-bit 
 
 ## 3. Registers
 
-Skyscraper has three register files: a 32-entry integer file, a 16-entry vec file, and a16-entry mask file. Integer registers are split into purpose-defined classes. The register encoding uses 5-bit fields for integer registers and 4-bit fields for vec/mask registers.
+Skyscraper has three register files: a 32-entry integer file, a 16-entry vec file, and a 16-entry mask file. Integer registers are split into purpose-defined classes. The register encoding uses 5-bit fields for integer registers and 4-bit fields for vec/mask registers.
 
 ### 3.1 Integer Registers (64-bit)
 
