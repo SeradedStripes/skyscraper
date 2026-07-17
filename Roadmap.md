@@ -14,12 +14,17 @@
 
 ## Phase 2: Language Essentials
 
-- [ ] Labels and jumps
-- [ ] Function calls and returns
-- [ ] Stack frame management
-- [ ] String and data directives
-- [ ] Basic error reporting (line numbers, messages)
-- [ ] Multi-file programs (entry point, imports)
+- [x] Labels and jumps (labels defined in code and data, label references in immediates)
+- [x] Constants (`$` and `.` for current address, `$name` for named constants)
+- [x] String and data directives (`.string`, `.text`, `.data`, `.bss`)
+- [x] Control flow (beq, bne, blt, bge, bltu, bgeu, ble, bgt, bzs, bnz, j, jal, jr, jalr, ret)
+- [x] Arithmetic/logic (add, sub, and, or, xor, not, neg, shl, shr + imm variants)
+- [x] Comparison (cmp, cmpi)
+- [x] Memory (ld, sd with base+offset addressing)
+- [x] Function calls and returns (jal/ret working, need stack frame convention)
+- [x] Stack frame management
+- [x] Basic error reporting (line numbers, messages)
+- [x] Multi-file programs (entry point, imports)
 
 ## Phase 3: Self-Hosting
 

@@ -7,18 +7,24 @@ pub struct Program {
 
 #[derive(Debug, Clone)]
 pub enum Statement {
-    LabelDef(String),
+    LabelDef {
+        name: String,
+        line: usize,
+    },
     Instruction {
         name: String,
         operands: Vec<Operand>,
+        line: usize,
     },
     Directive {
         name: String,
         args: Vec<Expr>,
+        line: usize,
     },
     ConstantDef {
         name: String,
         value: Expr,
+        line: usize,
     },
 }
 

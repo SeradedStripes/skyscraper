@@ -61,7 +61,7 @@ fn main() {
         }
     };
 
-    let mut parser = match parser::Parser::new(&source) {
+    let mut parser = match parser::Parser::new(&source, &filename) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Lexer error at {}:{}: {}", filename, e.line, e.message);
@@ -72,7 +72,7 @@ fn main() {
     let program = match parser.parse() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("Parse error at {}:{}: {}", filename, e.line, e.message);
+            eprintln!("Parse error at {}:{}: {}", e.file, e.line, e.message);
             process::exit(1);
         }
     };
@@ -96,7 +96,7 @@ fn main() {
             println!("Assembled to {}", out_path.display());
         }
         Err(e) => {
-            eprintln!("Codegen error: {:?}", e);
+            eprintln!("Codegen error: {}", e);
             process::exit(1);
         }
     }

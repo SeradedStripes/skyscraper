@@ -49,7 +49,7 @@ pub fn register_index(name: &str) -> Option<u8> {
 }
 
 /// REX.W prefix for 64-bit operand size, with B bit for extended registers.
-fn rex_w(reg: u8) -> u8 {
+pub fn rex_w(reg: u8) -> u8 {
     0x48 | if reg >= 8 { 0x01 } else { 0 }
 }
 
@@ -112,6 +112,146 @@ pub fn emit_syscall(code: &mut Vec<u8>) {
 /// NOP instruction (1 byte).
 pub fn emit_nop(code: &mut Vec<u8>) {
     code.push(0x90);
+}
+
+/// CMP r64, r64 (3 bytes). Sets flags.
+#[allow(dead_code)]
+pub fn emit_cmp_reg_reg(code: &mut Vec<u8>, reg1: u8, reg2: u8) {
+    code.push(rex_w_rr(reg1, reg2));
+    code.push(0x39); // CMP r/m64, r64
+    code.push(0xC0 | ((reg2 & 0x7) << 3) | (reg1 & 0x7));
+}
+
+/// CMP r64, imm32 (7 bytes). Sets flags.
+pub fn emit_cmp_reg_imm32(code: &mut Vec<u8>, reg: u8, imm: i32) {
+    code.push(rex_w(reg));
+    code.push(0x81);
+    code.push(0xF8 | (reg & 0x7)); // CMP r/m64, imm32
+    code.extend_from_slice(&imm.to_le_bytes());
+}
+
+/// TEST r64, r64 (3 bytes). Sets flags (AND without storing result).
+pub fn emit_test_reg_reg(code: &mut Vec<u8>, reg1: u8, reg2: u8) {
+    code.push(rex_w_rr(reg1, reg2));
+    code.push(0x85); // TEST r/m64, r64
+    code.push(0xC0 | ((reg2 & 0x7) << 3) | (reg1 & 0x7));
+}
+
+/// SUB r64, r64 (3 bytes). Sets flags.
+pub fn emit_sub_reg_reg(code: &mut Vec<u8>, dst: u8, src: u8) {
+    code.push(rex_w_rr(dst, src));
+    code.push(0x29); // SUB r/m64, r64
+    code.push(0xC0 | ((src & 0x7) << 3) | (dst & 0x7));
+}
+
+/// ADD r64, imm32 (7 bytes). Sets flags.
+pub fn emit_add_reg_imm32(code: &mut Vec<u8>, reg: u8, imm: i32) {
+    code.push(rex_w(reg));
+    code.push(0x81);
+    code.push(0xC0 | (reg & 0x7)); // ADD r/m64, imm32
+    code.extend_from_slice(&imm.to_le_bytes());
+}
+
+/// JMP rel32 (5 bytes). Target = PC + rel32.
+pub fn emit_jmp_rel32(code: &mut Vec<u8>, rel32: i32) {
+    code.push(0xE9);
+    code.extend_from_slice(&rel32.to_le_bytes());
+}
+
+/// Jcc rel32 (6 bytes). Conditional jump.
+/// cc: 0=O, 1=NO, 2=B/C, 3=NB/NC, 4=Z/E, 5=NZ/NE, 6=BE, 7=NBE, 8=S, 9=NS, 10=P/PE, 11=NP/PO, 12=L/NGE, 13=NL/GE, 14=LE/NG, 15=NLE/G
+pub fn emit_jcc_rel32(code: &mut Vec<u8>, cc: u8, rel32: i32) {
+    code.push(0x0F);
+    code.push(0x80 | cc);
+    code.extend_from_slice(&rel32.to_le_bytes());
+}
+
+/// CALL rel32 (5 bytes). Push return addr, jump to PC + rel32.
+pub fn emit_call_rel32(code: &mut Vec<u8>, rel32: i32) {
+    code.push(0xE8);
+    code.extend_from_slice(&rel32.to_le_bytes());
+}
+
+/// CALL r/m64 (2 bytes). Push return addr, jump to register.
+pub fn emit_call_reg(code: &mut Vec<u8>, reg: u8) {
+    code.push(0xFF);
+    code.push(0xD0 | (reg & 0x7));
+}
+
+/// RET instruction (1 byte).
+pub fn emit_ret(code: &mut Vec<u8>) {
+    code.push(0xC3);
+}
+
+/// JMP r/m64 (2 bytes). Jump to register.
+pub fn emit_jmp_reg(code: &mut Vec<u8>, reg: u8) {
+    code.push(0xFF);
+    code.push(0xE0 | (reg & 0x7));
+}
+
+/// MOV r64, [r64 + imm32] (load, 7 bytes with offset).
+pub fn emit_load_reg_mem(code: &mut Vec<u8>, dst: u8, base: u8, offset: i32) {
+    let need_rex = dst >= 8 || base >= 8;
+    if need_rex {
+        code.push(0x48 | if dst >= 8 { 0x04 } else { 0 } | if base >= 8 { 0x01 } else { 0 });
+    } else {
+        code.push(0x48);
+    }
+    code.push(0x8B);
+    // When base is RSP (4) or R12 (12), r/m=100 triggers SIB encoding.
+    // We must emit a SIB byte: scale=0, index=none(100), base=RSP.
+    let use_sib = (base & 0x7) == 4;
+    if use_sib {
+        if (-128..=127).contains(&offset) {
+            code.push(0x40 | ((dst & 0x7) << 3) | 0x04); // mod=01, reg=dst, r/m=100 (SIB)
+            code.push(0x24); // SIB: scale=0, index=none, base=RSP
+            code.push(offset as u8);
+        } else {
+            code.push(0x80 | ((dst & 0x7) << 3) | 0x04); // mod=10, reg=dst, r/m=100 (SIB)
+            code.push(0x24);
+            code.extend_from_slice(&offset.to_le_bytes());
+        }
+    } else {
+        if (-128..=127).contains(&offset) {
+            code.push(0x40 | ((dst & 0x7) << 3) | (base & 0x7));
+            code.push(offset as u8);
+        } else {
+            code.push(0x80 | ((dst & 0x7) << 3) | (base & 0x7));
+            code.extend_from_slice(&offset.to_le_bytes());
+        }
+    }
+}
+
+/// MOV [r64 + imm32], r64 (store, 7 bytes with offset).
+pub fn emit_store_mem_reg(code: &mut Vec<u8>, src: u8, base: u8, offset: i32) {
+    let need_rex = src >= 8 || base >= 8;
+    if need_rex {
+        code.push(0x48 | if src >= 8 { 0x04 } else { 0 } | if base >= 8 { 0x01 } else { 0 });
+    } else {
+        code.push(0x48);
+    }
+    code.push(0x89);
+    // When base is RSP (4) or R12 (12), r/m=100 triggers SIB encoding.
+    let use_sib = (base & 0x7) == 4;
+    if use_sib {
+        if (-128..=127).contains(&offset) {
+            code.push(0x40 | ((src & 0x7) << 3) | 0x04);
+            code.push(0x24);
+            code.push(offset as u8);
+        } else {
+            code.push(0x80 | ((src & 0x7) << 3) | 0x04);
+            code.push(0x24);
+            code.extend_from_slice(&offset.to_le_bytes());
+        }
+    } else {
+        if (-128..=127).contains(&offset) {
+            code.push(0x40 | ((src & 0x7) << 3) | (base & 0x7));
+            code.push(offset as u8);
+        } else {
+            code.push(0x80 | ((src & 0x7) << 3) | (base & 0x7));
+            code.extend_from_slice(&offset.to_le_bytes());
+        }
+    }
 }
 
 /// Map a Skyscraper ABI syscall number to a Linux x86-64 syscall number.
