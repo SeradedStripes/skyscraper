@@ -51,6 +51,7 @@ impl From<std::io::Error> for CodegenError {
 enum Section {
     Code,
     Data,
+    Bss,
 }
 
 struct LabelPos {
@@ -80,6 +81,7 @@ enum FixupKind {
 struct Codegen {
     code: Vec<u8>,
     data: Vec<u8>,
+    bss_size: usize,
     constants: HashMap<String, i64>,
     label_positions: HashMap<String, LabelPos>,
     labels: HashMap<String, usize>,
@@ -94,6 +96,7 @@ impl Codegen {
         Self {
             code: Vec::new(),
             data: Vec::new(),
+            bss_size: 0,
             constants: HashMap::new(),
             label_positions: HashMap::new(),
             labels: HashMap::new(),
@@ -112,11 +115,19 @@ impl Codegen {
 
         // Compute final label addresses
         let code_size = self.code.len();
+        let data_size = self.data.len();
         for (name, pos) in &self.label_positions {
             let addr = match pos.section {
                 Section::Code => (BASE_ADDR as usize) + elf::HDR_SIZE as usize + pos.offset,
                 Section::Data => {
                     (BASE_ADDR as usize) + elf::HDR_SIZE as usize + code_size + pos.offset
+                }
+                Section::Bss => {
+                    (BASE_ADDR as usize)
+                        + elf::HDR_SIZE as usize
+                        + code_size
+                        + data_size
+                        + pos.offset
                 }
             };
             self.labels.insert(name.clone(), addr);
@@ -179,6 +190,7 @@ impl Codegen {
         match self.current_section {
             Section::Code => self.code.len(),
             Section::Data => self.data.len(),
+            Section::Bss => self.bss_size,
         }
     }
 
@@ -858,7 +870,7 @@ impl Codegen {
         match name {
             ".text" => self.current_section = Section::Code,
             ".data" => self.current_section = Section::Data,
-            ".bss" => {}
+            ".bss" => self.current_section = Section::Bss,
             ".global" => {
                 if let Some(Expr::LabelRef(label)) = args.first() {
                     self.entry_point = Some(label.clone());
@@ -867,6 +879,51 @@ impl Codegen {
             ".string" => {
                 if let Some(Expr::String(s)) = args.first() {
                     self.data.extend_from_slice(s.as_bytes());
+                }
+            }
+            ".byte" => {
+                let val = self.eval_expr(
+                    args.first()
+                        .ok_or_else(|| self.line_err(".byte requires an argument".to_string()))?,
+                    0,
+                )?;
+                self.data.push(val as u8);
+            }
+            ".word" => {
+                let val = self.eval_expr(
+                    args.first()
+                        .ok_or_else(|| self.line_err(".word requires an argument".to_string()))?,
+                    0,
+                )?;
+                self.data.extend_from_slice(&(val as u16).to_le_bytes());
+            }
+            ".long" => {
+                let val = self.eval_expr(
+                    args.first()
+                        .ok_or_else(|| self.line_err(".long requires an argument".to_string()))?,
+                    0,
+                )?;
+                self.data.extend_from_slice(&(val as u32).to_le_bytes());
+            }
+            ".quad" => {
+                let val = self.eval_expr(
+                    args.first()
+                        .ok_or_else(|| self.line_err(".quad requires an argument".to_string()))?,
+                    0,
+                )?;
+                self.data.extend_from_slice(&val.to_le_bytes());
+            }
+            ".space" => {
+                let size = self.eval_expr(
+                    args.first().ok_or_else(|| {
+                        self.line_err(".space requires a size argument".to_string())
+                    })?,
+                    0,
+                )? as usize;
+                match self.current_section {
+                    Section::Data => self.data.extend(std::iter::repeat_n(0, size)),
+                    Section::Bss => self.bss_size += size,
+                    Section::Code => self.code.extend(std::iter::repeat_n(0, size)),
                 }
             }
             _ => {}
@@ -888,6 +945,13 @@ impl Codegen {
                         Section::Code => (BASE_ADDR as usize) + elf::HDR_SIZE as usize + pos.offset,
                         Section::Data => {
                             (BASE_ADDR as usize) + elf::HDR_SIZE as usize + code_size + pos.offset
+                        }
+                        Section::Bss => {
+                            (BASE_ADDR as usize)
+                                + elf::HDR_SIZE as usize
+                                + code_size
+                                + self.data.len()
+                                + pos.offset
                         }
                     };
                     Ok(addr as i64)
@@ -966,6 +1030,12 @@ pub fn compile(program: &Program, output: &Path) -> Result<(), CodegenError> {
         return Err(CodegenError::MissingEntryPoint);
     };
 
-    elf::write_elf(&codegen.code, &codegen.data, entry_offset, output)?;
+    elf::write_elf(
+        &codegen.code,
+        &codegen.data,
+        codegen.bss_size,
+        entry_offset,
+        output,
+    )?;
     Ok(())
 }

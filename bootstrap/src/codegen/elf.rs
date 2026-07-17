@@ -10,8 +10,15 @@ pub const HDR_SIZE: u64 = 120; // 64 (ELF header) + 56 (1 program header)
 ///
 /// Memory layout: [ELF hdr][PHDR] [code] [data]
 /// Everything is in one PT_LOAD segment mapped at BASE_ADDR.
-pub fn write_elf(code: &[u8], data: &[u8], entry_offset: usize, path: &Path) -> io::Result<()> {
+pub fn write_elf(
+    code: &[u8],
+    data: &[u8],
+    bss_size: usize,
+    entry_offset: usize,
+    path: &Path,
+) -> io::Result<()> {
     let file_size = HDR_SIZE as usize + code.len() + data.len();
+    let mem_size = file_size + bss_size;
     let entry_addr = BASE_ADDR + HDR_SIZE + entry_offset as u64;
 
     let mut f = fs::File::create(path)?;
@@ -49,7 +56,7 @@ pub fn write_elf(code: &[u8], data: &[u8], entry_offset: usize, path: &Path) -> 
     write_u64(&mut phdr[16..24], BASE_ADDR); // p_vaddr
     write_u64(&mut phdr[24..32], BASE_ADDR); // p_paddr
     write_u64(&mut phdr[32..40], file_size as u64); // p_filesz
-    write_u64(&mut phdr[40..48], file_size as u64); // p_memsz
+    write_u64(&mut phdr[40..48], mem_size as u64); // p_memsz
     write_u64(&mut phdr[48..56], 0x200000); // p_align
 
     f.write_all(&phdr)?;
